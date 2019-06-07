@@ -1,9 +1,8 @@
 
 function toggleFormVisibility() {
   // hide & seek with the form
-  addToy = !addToy
   const toyFormContainer = document.querySelector('.container');
-  if (addToy) {
+  if (!toyFormContainer.style.display || toyFormContainer.style.display == 'none') {
     toyFormContainer.style.display = 'block'
   } else {
     toyFormContainer.style.display = 'none'
@@ -32,20 +31,20 @@ function handleFormSubmit(event) {
     return response.json();
   }).then( (json) => {
     const toyCollection = document.querySelector('#toy-collection');
+    // it comes from the server as a string, but we want it to be an int
+    json["likes"] = parseInt(json["likes"]);
     const toyCard = addToyCard(json);
     toyCollection.appendChild(toyCard);
     resetForm();
     toggleFormVisibility();
-  })
+  }).catch( (err) => {
+    alert(`Failed to add new toy. Full error message was: ${err}`);
+  });
 }
 
-function increaseLikeCount(event) {
-  const likeButton = event.target;
-  const card = likeButton.parentElement;
-  const id = card.getAttribute("toyId");
-  const likesElement = card.querySelector('p');
-  const likeCountSpan = likesElement.querySelector('#like-count');
-  const likes = parseInt(likeCountSpan.innerHTML);
+function increaseLikeCount(event, toyData) {
+  const id = toyData["id"];
+  toyData["likes"]++;
 
   fetch(`http://localhost:3000/toys/${id}`, {
     method: "PATCH",
@@ -54,57 +53,108 @@ function increaseLikeCount(event) {
       "Accept": "application/json"
     },
     body: JSON.stringify({
-      "likes": likes + 1
+      "likes": toyData["likes"]
     })
   }).then( (response) => {
     return response.json();
   }).then( (json) => {
-    updateLikeCount(json["id"], json["likes"]);
-  })
+    updateLikeCount(event, json["likes"]);
+  }).catch( (err) => {
+    toyData["likes"]--;
+    alert(`Failed to add more likes. Full error message was: ${err}`);
+  });
 }
 
-function updateLikeCount(toyId, likeCount) {
-  const card = document.querySelector(`[toyId='${toyId}']`);
+function updateLikeCount(event, updatedLikesFromServer) {
+  const likeButton = event.target;
+  const card = likeButton.parentElement;
   const likeCountSpan = card.querySelector('#like-count');
-  likeCountSpan.innerHTML = likeCount;
+  likeCountSpan.innerText = updatedLikesFromServer;
 }
 
 function addToyCard(toyData) {
+
+  // <div class="card"></div>
   const toyCard = document.createElement('div');
   toyCard.className = "card";
-  toyCard.setAttribute("toyId", toyData["id"]);
 
+  // <h2>:name</h2>
   const toyHeading = document.createElement('h2');
-  toyHeading.innerHTML = toyData["name"];
+  toyHeading.innerText = toyData["name"];
+
+  /*
+    <div class="card">
+      <h2>:name</h2>
+    </div>
+  */
   toyCard.appendChild(toyHeading);
 
+  // <img src=":image" class="toy-avatar">
   const toyImage = document.createElement('img');
   toyImage.src = toyData["image"];
   toyImage.className = "toy-avatar";
+
+  /*
+    <div class="card">
+      <h2>:name</h2>
+      <img src=":image" class="toy-avatar">
+    </div>
+  */
   toyCard.appendChild(toyImage);
 
+  // <p></p>
   const toyLikes = document.createElement('p');
+
+  // <span id="like-count">:likes</span>
   const likeCountSpan = document.createElement('span');
-  const likeTextSpan = document.createElement('span');
-  likeCountSpan.innerHTML = toyData["likes"];
+  likeCountSpan.innerText = toyData["likes"];
   likeCountSpan.id = "like-count";
-  likeTextSpan.innerHTML = " Likes ";
+
+  // <p><span id="like-count">:likes</span></p>
   toyLikes.appendChild(likeCountSpan);
-  toyLikes.appendChild(likeTextSpan);
+
+  // " Likes"
+  const toyLikesText = document.createTextNode(" Likes");
+
+  // <p><span id="like-count">:likes</span> Likes</p>
+  toyLikes.appendChild(toyLikesText);
+
+  /*
+    <div class="card">
+      <h2>:name</h2>
+      <img src=":image" class="toy-avatar">
+      <p><span id="like-count">:likes</span> Likes</p>
+    </div>
+  */
   toyCard.appendChild(toyLikes);
 
+  // <button class="like-btn">Like <3</button>
   const toyLikeButton = document.createElement('button');
   toyLikeButton.className = "like-btn";
-  toyLikeButton.innerHTML = "Like <3";
-  toyLikeButton.addEventListener("click", increaseLikeCount);
+  toyLikeButton.innerText = "Like <3";
+
+  /*
+    invoking the method in an anonymous function to customize params
+    if we said `.addEventListener("click", increaseLikeCount);`, that method
+    would only get the event data, but we want it to have `toyData` too
+  */
+  toyLikeButton.addEventListener("click", (ev) => increaseLikeCount(ev, toyData));
+
+  /*
+    <div class="card">
+      <h2>:name</h2>
+      <img src=":image" class="toy-avatar">
+      <p><span id="like-count">:likes</span> Likes</p>
+      <button class="like-btn">Like <3</button>
+    </div>
+  */
   toyCard.appendChild(toyLikeButton);
 
   return toyCard;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  // global to handle toggling form
-  addToy = false;
+
   const addBtn = document.querySelector('#new-toy-btn');
   addBtn.addEventListener('click', toggleFormVisibility);
 
@@ -118,9 +168,13 @@ document.addEventListener("DOMContentLoaded", () => {
   .then( (json) => {
     const toyCollection = document.querySelector('#toy-collection');
     for (const toyData of json) {
+      // it comes from the server as a string, but we want it to be an int
+      toyData["likes"] = parseInt(toyData["likes"]);
       const toyCard = addToyCard(toyData);
       toyCollection.appendChild(toyCard);
     }
+  }).catch( (err) => {
+    alert(`Toys DB failed to load.  Are you sure you started the JSON server? Full error message was: ${err}`);
   });
 
 });
